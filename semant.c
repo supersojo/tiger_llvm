@@ -1,7 +1,6 @@
 #include <iostream>
 #include "semant.h"
 #include "tiger_assert.h"
-#include "frame.h"
 #include "tree.h"
 
 /*

@@ -15,16 +15,17 @@ tiger:
 	@gcc tiger.o runtime.o -o tiger
 
 $(TARGET): $(DEPS) $(OBJS) $(SRCS)
-	g++  $(OBJS) $(LDFLAGS) $(LLVM_LIBS) -o $@
+	@g++  $(OBJS) $(LDFLAGS) $(LLVM_LIBS) -o $@
 	@echo linking $(TARGET) 
 
 deps: $(DEPS)
 
 %.d: %.c
 	@g++ -MM $(CCFLAGS) $< > $@
+	@echo generating $<
 
 %.o: %.c
-	g++ -c -g -Wno-write-strings $(CCFLAGS) $< -o $@
+	@g++ -c -g -Wno-write-strings $(CCFLAGS) $< -o $@
 	@echo compiling $<
 
 -include $(DEPS)

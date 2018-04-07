@@ -7,7 +7,6 @@
 #include "types.h"// symbol table 
 #include "absyn.h"// sbstract syntax tree
 #include "tree.h"//immediate representation tree
-#include "frame.h"
 
 namespace tiger{
 

@@ -5,8 +5,7 @@
 #include "tiger_type.h"
 #include "tiger_log.h"
 #include "tiger_assert.h"
-#include "absyn.h" //Symbol
-#include "frame.h" //?
+#include "symbol.h" //Symbol
 
 #include <llvm/IR/Type.h>
 #include "irgencontext.h"
