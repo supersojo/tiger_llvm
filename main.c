@@ -7,14 +7,8 @@
 #include "tiger_assert.h"
 #include "types.h"
 #include "type_check.h"
-#include "semant.h"
 #include "escape.h"
 #include "tree.h"
-#include "canon.h"
-#include "assem.h"
-#include "graph.h"
-#include "regalloc.h"
-#include "tree_gen.h"
 #include "tiger_llvm.h"
 #include <llvm/IR/ValueSymbolTable.h>
 
@@ -191,6 +185,7 @@ void test_typecheck(){
     
     tiger::TempLabel::Exit();
 }
+#if 0
 void test_tree_gen(){
     tiger::Exp* exp;
     tiger::TreeGenResult* tr;
@@ -360,6 +355,7 @@ void test_tree_gen(){
     #endif
     delete exp;
 }
+#endif
 #if 0
 void test_code_gen(){
     tiger::Exp* exp;
@@ -547,6 +543,7 @@ void test_tree(){
     delete e;
     
 }
+#if 0
 void test_litstringlist(){
     tiger::LoggerStdio logger;
     logger.SetModule("tree");
@@ -688,6 +685,7 @@ void test_liveness()
     
     tiger::TempLabel::Exit();
 }
+#endif
 void test_llvm()
 {
     tiger::Exp* exp;
@@ -697,7 +695,7 @@ void test_llvm()
         
     //tiger::scanner::FileSourceCodeStream stream((char*)"a.txt");
     //tiger::scanner::FileSourceCodeStream stream((char*)"b.txt");
-    tiger::scanner::StringSourceCodeStream stream((char*)"let var a:=1 in let var b:=1 in while b<10 do a:=a+b  end end");
+    tiger::scanner::StringSourceCodeStream stream((char*)"let var N:=8 type intArray=array of int var row:=intArray [N+N+1] of 0 in row[1]:=N end");
     
     /* generate sbstract syntax tree*/
     tiger::parser::Parser parser(&stream);
@@ -724,9 +722,9 @@ int main()
     //test_tree();
     //test_litstringlist();
     //test_typecheck();
-    test_tree_gen();
+    //test_tree_gen();
     //test_canon();
     //test_liveness();
-    //test_llvm();
+    test_llvm();
     return 0;
 }

@@ -70,7 +70,7 @@ public:
                 return "invalid";
         }
     }
-    llvm::Type* GetLLVMType(){return m_llvm_type;}
+    virtual llvm::Type* GetLLVMType(){return m_llvm_type;}
     void SetLLVMType(llvm::Type* ty){m_llvm_type = ty;}
     virtual s32 Size(){return 0;}
     virtual ~TypeBase(){}
@@ -211,44 +211,6 @@ public:
     }
     TypeRecord(TypeFieldList* record):TypeBase(kType_Record){
         m_record = record;
-        /*
-        type a={
-        x:int,
-        y:a
-        }
-        
-        aTy={
-            x:int,
-            y:aTy
-        }
-        */
-        TypeFieldNode* p;
-        p = m_record->GetHead();
-        std::vector<llvm::Type*> tys;
-        while(p){
-            
-            if(p->m_field->Type()->Kind()==TypeBase::kType_Record)
-            {
-                tys.push_back(llvm::PointerType::getUnqual( p->m_field->Type()->GetLLVMType() ));
-                
-            }
-            else
-            {
-                tys.push_back( p->m_field->Type()->GetLLVMType() );
-            }
-            
-            p = p->next;
-        }
-        
-        /*
-        std::vector<Type*> fields;
-        for(auto f : m_record->getlist())
-            fields.Insert(f->Type()->GetLLVMType())
-        StructType(
-        
-        )
-        
-        */
     }
     TypeFieldList* GetList(){return m_record;}
     virtual s32 Size(){
@@ -276,6 +238,9 @@ public:
     }
     Symbol* Name(){return m_name;}
     TypeBase* Type(){return m_type;}
+    
+    llvm::Type* GetLLVMType(){return m_type->GetLLVMType();}
+    
     void Update(TypeBase* n){
         if(m_type){
             delete m_type;

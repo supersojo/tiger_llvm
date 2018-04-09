@@ -42,7 +42,7 @@ public:
     void SetLevel(s32 level){m_level = level;}
     LoggerBase(){m_kind = kLogger_Invalid;m_level = kLogger_Level_Invalid;m_module=0;}
     LoggerBase(s32 kind){m_kind=kind;m_level=kLogger_Level_Default;m_module=0;}
-    ~LoggerBase(){
+    virtual ~LoggerBase(){
         if(m_module)
             free(m_module);
     }

@@ -1,6 +1,7 @@
 #include "tiger_type.h"
 #include "symbol.h"
 #include "symtab.h"
+#include "tiger_llvm.h"
 
 namespace tiger
 {
@@ -215,8 +216,10 @@ TypeBase*  SymTab::Type(Symbol* s)
 {
     EnvEntryBase* binding;
     binding = Lookup(MakeSymbol(s));
-    if(binding && binding->Kind()==EnvEntryBase::kEnvEntry_Var){
-        return dynamic_cast<EnvEntryVar*>(binding)->Type();
+    m_logger.W("wrong type %s",s->Name());
+    if(binding && binding->Kind()==EnvEntryVar::kEnvEntry_Var)
+    {
+        return dynamic_cast<EnvEntryVarLLVM*>(binding)->Type();
     }
     m_logger.W("wrong type %s",s->Name());
     return 0;

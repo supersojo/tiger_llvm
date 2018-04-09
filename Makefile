@@ -22,7 +22,7 @@ deps: $(DEPS)
 
 %.d: %.c
 	@g++ -MM $(CCFLAGS) $< > $@
-	@echo generating $<
+	@echo generating $@
 
 %.o: %.c
 	@g++ -c -g -Wno-write-strings $(CCFLAGS) $< -o $@

@@ -40,7 +40,7 @@ void EscapeHelper::TransExp(SymTab* venv,s32 depth,Exp* exp){
             if(dynamic_cast<LetExp*>(exp)->GetBody()==0)
                 m_logger.D("empty body in let");
             
-            TransExp(venv,depth+1,dynamic_cast<LetExp*>(exp)->GetBody());
+            TransExp(venv,depth,dynamic_cast<LetExp*>(exp)->GetBody());
             
             venv->EndScope();
             break;
@@ -106,7 +106,7 @@ void EscapeHelper::TransExp(SymTab* venv,s32 depth,Exp* exp){
                         
             venv->BeginScope(ScopeMaker::kScope_For);
             
-            venv->Enter(venv->MakeSymbol(var),new EnvEntryEscape(depth+1,var->GetEscapeRefer()));
+            venv->Enter(venv->MakeSymbol(var),new EnvEntryEscape(depth,var->GetEscapeRefer()));
             var->SetEscape(0/*false*/);
             
             TransExp(venv,depth,body_exp);// we still in the depth.no need depth+1

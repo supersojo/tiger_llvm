@@ -5,7 +5,7 @@
 #include "temp.h"
 #include "types.h"
 #include "tiger_log.h"
-
+#include "frame.h"
 namespace tiger
 {
 

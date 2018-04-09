@@ -21,10 +21,29 @@
  OUTPUT:
     LLVM IR
  NOTES:
-    escape - 
-    type - 
-    symbol table -
+    escape - no need
+    type - need associate LLVM
+    symbol table - need lexical scope
     
+ --------------------------
+ Level & Scope
+ let //scope
+ in
+    let //scope
+    in
+        let //scope
+        in
+        end
+    end
+ end
+ 
+ let
+    function foo()= //level
+    let
+    in
+    end
+ in
+ end
  --------------------------    
  let
  function foo()=
@@ -70,7 +89,7 @@ public:
         TypeName*p = dynamic_cast<TypeName*>(m_type);
         p->Update(n);
         //construct structtype of llvm
-        std::vector<llvm::Type*> vv;
+        //std::vector<llvm::Type*> vv;
         //vv.insert()
         //m_llvm_type = llvm::StructType(array);
 
@@ -143,7 +162,21 @@ private:
     s32 m_fun_kind;
     std::list<Symbol*> m_escape_list;//for escape
 };
-
+struct IRGenResult
+{
+    IRGenResult(){
+        m_type = 0;
+        m_llvm_value = 0;
+        m_llvm_type = 0;
+    };
+    TypeBase* Type(){return m_type;}
+    llvm::Value* LLVMValue(){return m_llvm_value;}
+    llvm::Type* LLVMType(){return m_llvm_type;}
+    TypeBase* m_type;//tiger type
+    llvm::Value* m_llvm_value;//llvm value
+    llvm::Type* m_llvm_type;//llvm type
+    
+};
 class IRGen{
 public:
     IRGen(){
@@ -158,17 +191,20 @@ public:
     }
     void Gen(SymTab* venv,SymTab* tenv,Exp* e){
         IRGenExp(venv,tenv,OutmostLevel(),e,0);
+        allocapoint->eraseFromParent();
         m_context->B()->CreateRetVoid();
     }
     IRGenContext* GetContext(){return m_context;}
-    llvm::Value* IRGenExp(SymTab* venv,SymTab* tenv,Level* level,Exp* e,llvm::BasicBlock* dest_bb);
-    llvm::Value* IRGenExpLet(SymTab* venv,SymTab* tenv,Level* level,Exp* e,llvm::BasicBlock* dest_bb);
+    IRGenResult* IRGenExp(SymTab* venv,SymTab* tenv,Level* level,Exp* e,llvm::BasicBlock* dest_bb);
+    IRGenResult* IRGenExpLet(SymTab* venv,SymTab* tenv,Level* level,Exp* e,llvm::BasicBlock* dest_bb);
     void         IRGenDec(SymTab* venv,SymTab* tenv,Level* level,Dec* dec,llvm::BasicBlock* dest_bb);
-    llvm::Value* IRGenVar(SymTab* venv,SymTab* tenv,Level* level,Var* var,llvm::BasicBlock* dest_bb);
+    IRGenResult* IRGenVar(SymTab* venv,SymTab* tenv,Level* level,Var* var,llvm::BasicBlock* dest_bb);
     TypeBase* IRGenTy(SymTab* tenv,Level* level,Ty* ty);
     void IRGenTypeDec(SymTab* venv,SymTab* tenv,Level* level,Dec* dec);
 private:
     IRGenContext* m_context;
+    
+    llvm::Instruction * allocapoint;
     
     void Init();
     Level* m_top_level;
