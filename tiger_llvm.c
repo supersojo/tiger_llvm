@@ -8,16 +8,20 @@ void IRGen::Init()
     
     
 }
+IRGen::~IRGen(){
+    IRGenContext::Exit();
+}
 Level* IRGen::OutmostLevel()
 {
     if(m_top_level==0){
         //create the out most function and the entry basic block
         m_top_level = new Level(0, new FrameBase(FrameBase::kFrame_X86));
         llvm::FunctionType* ft = llvm::FunctionType::get(llvm::Type::getVoidTy(*(m_context->C())),false/*var args flag*/);
-        llvm::Function* f = llvm::Function::Create(ft,llvm::Function::ExternalLinkage,"main",m_context->M());
+        llvm::Function* f = llvm::Function::Create(ft,llvm::Function::ExternalLinkage,"tiger_main",m_context->M());
         llvm::BasicBlock* bb = llvm::BasicBlock::Create( *(m_context->C()), "entry", f);
         m_context->B()->SetInsertPoint(bb);
         m_top_level->SetFunc(f);
+        m_top_level->SetCurBB(bb);
         
     }
 
@@ -316,6 +320,211 @@ void IRGen::IRGenTypeDec(SymTab* venv,SymTab* tenv,Level* level,Dec* dec)
         head = head->next;
     }
 }
+TypeFieldList* IRGen::MakeFormalsList(SymTab* venv,SymTab* tenv,Level* level,FieldList* params)
+{
+    FieldNode* head;
+    
+    TypeFieldNode* tyhead=0;
+    TypeFieldNode* tynext=0;
+    TypeFieldNode* tynew=0;
+    
+    /* function foo() */
+    if(params==0){
+        m_logger.D("function formals is empty");
+        return new TypeFieldList(0);
+    }
+    
+    head = params->GetHead();
+    
+    while(head)
+    {
+        tynew = new TypeFieldNode;
+        tynew->m_field = (new TypeField(venv->MakeSymbol(head->m_field->Name()),dynamic_cast<EnvEntryVarLLVM*>(tenv->Lookup(tenv->MakeSymbol(head->m_field->Type())))->Type()));
+        if(tyhead==0)
+            tyhead = tynew;
+        if(tynext==0)
+            tynext = tynew;
+        else{
+            tynext->next = tynew;
+            tynew->prev = tynext;
+            tynext = tynew;
+
+        }
+        head = head->next;
+    }
+    return new TypeFieldList(tyhead);
+    
+}
+FrameBase* IRGen::MakeNewFrame(FunDec* fundec)
+{
+    FrameBase* f;
+    
+    f = new FrameBase(FrameBase::kFrame_X86);
+
+    return f;
+}
+void IRGen::IRGenFunctionDec(SymTab* venv,SymTab* tenv,Level* level,Dec* dec,llvm::BasicBlock* dest_bb)
+{
+    /*
+    stack frame:
+    - static link
+    - formal args
+    - local args
+    */
+    FunDecNode* fundec_head;
+    FieldNode* head;
+    
+    TypeFieldNode* tyhead=0;
+    TypeFieldNode* tynext=0;
+    TypeFieldNode* tynew=0;
+    
+    IRGenResult *a;
+
+    Level* alevel;
+    
+    m_logger.D("type check with kDec_Function");
+    
+    fundec_head = dynamic_cast<FunctionDec*>(dec)->GetList()->GetHead();
+    /*
+    function a()=0 ==> FunctionType * ft = FunctionType::get(params,ret)
+    Function::get(ft)
+    function b()=a()
+    */
+    /* process all function header decs */
+    while(fundec_head){
+
+        /* level and label */
+        alevel = new Level(level,MakeNewFrame(fundec_head->m_fundec));
+        //m_level_manager->NewLevel(alevel);
+        if(fundec_head->m_fundec->Type()==0){
+            m_logger.D("empty function return type ");
+            
+            std::vector<llvm::Type*> tys;
+            if(fundec_head->m_fundec->GetList()!=0)
+            {
+                head = fundec_head->m_fundec->GetList()->GetHead();
+                
+                while(head){
+                    TypeBase* t = dynamic_cast<EnvEntryVarLLVM*>(tenv->Lookup(tenv->MakeSymbol(head->m_field->Type())))->Type();
+                    if(llvm::isa<llvm::StructType>(t->GetLLVMType()))
+                        tys.push_back(llvm::PointerType::getUnqual(t->GetLLVMType()));
+                    else
+                        tys.push_back(t->GetLLVMType());
+                    head = head->next;
+                }
+            }
+            
+            llvm::FunctionType* ft = llvm::FunctionType::get(llvm::Type::getVoidTy( *(m_context->C())),llvm::makeArrayRef<llvm::Type*>(tys),false/*var args flag*/);
+            llvm::Function* f = llvm::Function::Create(ft,llvm::Function::ExternalLinkage,fundec_head->m_fundec->Name()->Name(),m_context->M());
+            llvm::BasicBlock* bb = llvm::BasicBlock::Create( *(m_context->C()),"entry",f);
+            alevel->SetCurBB(bb);
+            
+            EnvEntryFunLLVM* ef = new EnvEntryFunLLVM( 
+                                          MakeFormalsList(venv,tenv,level,fundec_head->m_fundec->GetList()),
+                                          0, 
+                                          alevel, 
+                                          TempLabel::NewNamedLabel(fundec_head->m_fundec->Name()->Name()),
+                                          0/*kind*/
+                                        );
+            ef->SetFun(f);
+            venv->Enter( venv->MakeSymbol(fundec_head->m_fundec->Name()),
+                         ef
+                       );
+            
+            
+        }else{
+            venv->Enter( venv->MakeSymbol(fundec_head->m_fundec->Name()),
+                         new EnvEntryFunLLVM( 
+                                          MakeFormalsList(venv,tenv,level,fundec_head->m_fundec->GetList()), 
+                                          dynamic_cast<EnvEntryVar*>( 
+                                                                      tenv->Lookup( tenv->MakeSymbol(fundec_head->m_fundec->Type()) )
+                                                                    )->Type(), 
+                                          alevel, 
+                                          TempLabel::NewNamedLabel(fundec_head->m_fundec->Name()->Name()),
+                                          0/*kind*/
+                                        )
+                       );
+        }
+        fundec_head = fundec_head->next;
+    }
+    
+    /* process all function body decs */
+    fundec_head = dynamic_cast<FunctionDec*>(dec)->GetList()->GetHead();
+    while(fundec_head){
+        
+        /* each function needs its own level information */
+        alevel = dynamic_cast<EnvEntryFunLLVM*>( venv->Lookup( venv->MakeSymbol(fundec_head->m_fundec->Name()) ))->GetLevel();
+        TIGER_ASSERT(alevel!=0,"function level is empty!");
+        
+        /* function foo() */
+        if(fundec_head->m_fundec->GetList()!=0)
+            head = fundec_head->m_fundec->GetList()->GetHead();
+        
+        venv->BeginScope(ScopeMaker::kScope_Fun);
+        if(fundec_head->m_fundec->GetList()!=0){
+            s32 i=0;//last formal arg for static link
+            llvm::Argument* arg = llvm::cast<llvm::Argument>(alevel->CurBB()->getParent()->arg_begin());
+            while(head){
+                TypeBase* t;
+                t = dynamic_cast<EnvEntryVarLLVM*>(tenv->Lookup(tenv->MakeSymbol(head->m_field->Type())))->Type();
+                m_context->B()->SetInsertPoint( alevel->CurBB() );
+                llvm::Value* v;
+                if(llvm::isa<llvm::StructType>(t->GetLLVMType())){
+                    v = m_context->B()->CreateAlloca(llvm::PointerType::getUnqual(t->GetLLVMType()));
+                }else
+                    v = m_context->B()->CreateAlloca(t->GetLLVMType());
+               
+                //load param from arguments
+                // access function args
+                m_context->B()->CreateStore(arg,v);
+                llvm::Value* vv;
+                if(llvm::isa<llvm::StructType>(t->GetLLVMType())){
+                    vv = m_context->B()->CreateLoad(v);
+                }else
+                    vv = v;
+                
+                venv->Enter( venv->MakeSymbol(head->m_field->Name()),
+                             new EnvEntryVarLLVM( 
+                                              t, 
+                                              EnvEntryVar::kEnvEntryVar_For_Value, 
+                                              t->GetLLVMType(),
+                                              vv
+                                            ) 
+                           );
+                
+                head = head->next;
+                i++;
+            }
+        }
+        // process function body
+         m_context->B()->SetInsertPoint( alevel->CurBB() );
+        a = IRGenExp(venv,tenv,alevel,fundec_head->m_fundec->GetExp(),alevel->CurBB());
+        m_context->B()->CreateRetVoid();
+        
+        m_context->B()->SetInsertPoint( level->CurBB() );
+        //update type info from body if no type in function head
+        if(fundec_head->m_fundec->Type()==0){
+            m_logger.D("function return type is null");
+            // TBD: update type info
+            if(a!=0)
+                dynamic_cast<EnvEntryFunLLVM*>( venv->Lookup( venv->MakeSymbol(fundec_head->m_fundec->Name()) ))->SetType(a->Type());
+        }else
+        {
+            m_logger.D("type kind %d",a->Type()->Kind());
+            if(a->Type()->Kind()!=TypeBase::kType_Nil)
+            {
+                TIGER_ASSERT(a->Type() == dynamic_cast<EnvEntryVar*>(tenv->Lookup(tenv->MakeSymbol(fundec_head->m_fundec->Type())))->Type(), "return type mismatch");
+            }
+        }
+        
+
+        delete a;
+        
+        venv->EndScope();
+        
+        fundec_head = fundec_head->next;
+    }
+}
 void IRGen::IRGenDec(SymTab* venv,SymTab* tenv,Level* level,Dec* dec,llvm::BasicBlock* dest_bb)
 {
     switch(dec->Kind())
@@ -384,7 +593,7 @@ void IRGen::IRGenDec(SymTab* venv,SymTab* tenv,Level* level,Dec* dec,llvm::Basic
                     ) 
                 );
                 ////TBD: element initialize
-                
+                delete t;
                 return;
                 
             }else if(dynamic_cast<VarDec*>(dec)->GetExp()->Kind()==Exp::kExp_Record){
@@ -430,12 +639,13 @@ void IRGen::IRGenDec(SymTab* venv,SymTab* tenv,Level* level,Dec* dec,llvm::Basic
                         v
                     ) 
             );
-
+            delete t;
             return ;
         }
         case Dec::kDec_Function:
         {
             //TBD: 
+            IRGenFunctionDec(venv,tenv,level,dec,dest_bb);
             return;
         }
         case Dec::kDec_Type:{
@@ -506,6 +716,7 @@ IRGenResult* IRGen::IRGenExp(SymTab* venv,SymTab* tenv,Level* level,Exp* e,llvm:
         }
         case Exp::kExp_Assign:
         {
+            delete result;//no use
             m_logger.D("kExp_Assign");
             IRGenResult* a = IRGenVar(venv,tenv,level,dynamic_cast<AssignExp*>(e)->GetVar(),dest_bb);
             IRGenResult* b = IRGenExp(venv,tenv,level,dynamic_cast<AssignExp*>(e)->GetExp(),dest_bb);
@@ -531,6 +742,7 @@ IRGenResult* IRGen::IRGenExp(SymTab* venv,SymTab* tenv,Level* level,Exp* e,llvm:
         }
         case Exp::kExp_Seq:
         {
+            delete result;//no use
             IRGenResult* tt;
             TIGER_ASSERT(e->Kind()==Exp::kExp_Seq,"seq exp expected");
             
@@ -545,7 +757,33 @@ IRGenResult* IRGen::IRGenExp(SymTab* venv,SymTab* tenv,Level* level,Exp* e,llvm:
                 delete tt;
                 p = p->next;
             }
-            delete result;
+            return 0;
+        }
+        case Exp::kExp_Call:
+        {
+            ExpNode* head;
+            IRGenResult* t;
+            TIGER_ASSERT(e->Kind()==Exp::kExp_Call,"call exp expected");
+            EnvEntryFunLLVM* f = dynamic_cast<EnvEntryFunLLVM*>(venv->Lookup(venv->MakeSymbol(dynamic_cast<CallExp*>(e)->Name())));
+            
+            head = dynamic_cast<CallExp*>(e)->GetList()->GetHead();
+            std::vector<llvm::Value*> parms;
+            int i=0;
+            while(head){
+                t = IRGenExp(venv,tenv,level,head->m_exp,dest_bb);
+                f->GetFun()->getFunctionType()->params()[i]->dump();
+                t->m_llvm_type->dump();
+                if(t->m_llvm_value->getType()!=t->m_llvm_type){
+                    llvm::Value* v = m_context->B()->CreateLoad(t->m_llvm_value);
+                    parms.push_back(v);
+                }
+                else
+                    parms.push_back(t->m_llvm_value);
+                    
+
+                head = head->next;
+            }
+            m_context->B()->CreateCall(f->GetFun(),llvm::makeArrayRef<llvm::Value*>(parms));
             return 0;
         }
         case Exp::kExp_Op:
@@ -610,6 +848,8 @@ IRGenResult* IRGen::IRGenExp(SymTab* venv,SymTab* tenv,Level* level,Exp* e,llvm:
                     result->m_type = l_val->Type();
                     result->m_llvm_value = cond;
                     result->m_llvm_type = l_val->Type()->GetLLVMType();
+                    delete l_val;
+                    delete r_val;
                     return result;
                 }
                 case Oper::kOper_Gt:
@@ -622,6 +862,8 @@ IRGenResult* IRGen::IRGenExp(SymTab* venv,SymTab* tenv,Level* level,Exp* e,llvm:
                     result->m_type = l_val->Type();
                     result->m_llvm_value = cond;
                     result->m_llvm_type = l_val->Type()->GetLLVMType();
+                    delete l_val;
+                    delete r_val;
                     return result;
                 }
                 case Oper::kOper_Le:
@@ -634,6 +876,8 @@ IRGenResult* IRGen::IRGenExp(SymTab* venv,SymTab* tenv,Level* level,Exp* e,llvm:
                     result->m_type = l_val->Type();
                     result->m_llvm_value = cond;
                     result->m_llvm_type = l_val->Type()->GetLLVMType();
+                    delete l_val;
+                    delete r_val;
                     return result;
                 }
                 case Oper::kOper_Ge:
@@ -646,6 +890,8 @@ IRGenResult* IRGen::IRGenExp(SymTab* venv,SymTab* tenv,Level* level,Exp* e,llvm:
                     result->m_type = l_val->Type();
                     result->m_llvm_value = cond;
                     result->m_llvm_type = l_val->Type()->GetLLVMType();
+                    delete l_val;
+                    delete r_val;
                     return result;
                 }
                 case Oper::kOper_Eq:
@@ -658,6 +904,8 @@ IRGenResult* IRGen::IRGenExp(SymTab* venv,SymTab* tenv,Level* level,Exp* e,llvm:
                     result->m_type = l_val->Type();
                     result->m_llvm_value = cond;
                     result->m_llvm_type = l_val->Type()->GetLLVMType();
+                    delete l_val;
+                    delete r_val;
                     return result;
                 }
                 case Oper::kOper_Neq:
@@ -670,6 +918,8 @@ IRGenResult* IRGen::IRGenExp(SymTab* venv,SymTab* tenv,Level* level,Exp* e,llvm:
                     result->m_type = l_val->Type();
                     result->m_llvm_value = cond;
                     result->m_llvm_type = l_val->Type()->GetLLVMType();
+                    delete l_val;
+                    delete r_val;
                     return result;
                 }
                 default:
@@ -680,6 +930,7 @@ IRGenResult* IRGen::IRGenExp(SymTab* venv,SymTab* tenv,Level* level,Exp* e,llvm:
         }
         case Exp::kExp_If:
         {
+            delete result;//no use
             /*
             XXXX1
             if_statement
@@ -710,6 +961,7 @@ IRGenResult* IRGen::IRGenExp(SymTab* venv,SymTab* tenv,Level* level,Exp* e,llvm:
             test_val = IRGenExp(venv,tenv,level,test,end_bb);
             m_context->B()->CreateCondBr(test_val->m_llvm_value,then_bb,elsee_bb);
             
+            
             m_context->B()->SetInsertPoint(then_bb);
             then_val = IRGenExp(venv,tenv,level,then,end_bb);
             m_context->B()->SetInsertPoint(then_bb);
@@ -721,18 +973,41 @@ IRGenResult* IRGen::IRGenExp(SymTab* venv,SymTab* tenv,Level* level,Exp* e,llvm:
             m_context->B()->CreateBr(end_bb);
             
             m_context->B()->SetInsertPoint(end_bb);
-            if(dest_bb)
-                m_context->B()->CreateBr(dest_bb);
+            //if(dest_bb)
+            //    m_context->B()->CreateBr(dest_bb);
+            
+            
+            m_context->B()->SetInsertPoint(end_bb);
+            
+            delete test_val;
+            delete then_val;
+            delete elsee_val;
             return 0;
             
         }
         case Exp::kExp_While:
         {
+            delete result;//no use
             /*
             XXXX1
             while_statement
             XXXX2
             while need jump to XXXX2 // create new bb  the new bb should jump to the XXXX2
+            
+            
+            
+            
+            while cond
+             st
+             
+            loop:
+                cond
+            body:
+                
+                
+                br loop
+            end:
+               br dest_bb
             */
             Exp* test;
             Exp* body;
@@ -758,17 +1033,21 @@ IRGenResult* IRGen::IRGenExp(SymTab* venv,SymTab* tenv,Level* level,Exp* e,llvm:
             m_context->B()->CreateCondBr(test_val->m_llvm_value,body_bb,end_bb);
             
             m_context->B()->SetInsertPoint(body_bb);
-            body_val = IRGenExp(venv,tenv,level,body,end_bb);
-            m_context->B()->SetInsertPoint(body_bb);
+            body_val = IRGenExp(venv,tenv,level,body,end_bb);///
+            //m_context->B()->SetInsertPoint(body_bb);
+          
             m_context->B()->CreateBr(loop_bb);
             
             m_context->B()->SetInsertPoint(end_bb);
             if(dest_bb)
                 m_context->B()->CreateBr(dest_bb);
+            delete test_val;
+            delete body_val;
             return 0;
         }
         case Exp::kExp_Let:
         {
+            delete result;//no use
             return IRGenExpLet(venv,tenv,level,e,dest_bb);
         }
         default:

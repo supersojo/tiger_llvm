@@ -1,11 +1,9 @@
-void stub()
+void printint(int i)
 {
-    asm(".globl _tiger_resume");
-    asm("jmp _tiger_entry");
-    asm("_tiger_resume:");
+	printf("%d",i);
 }
 int main()
 {
-    stub();
-    return 0;
+tiger_main();
+return 0;
 }

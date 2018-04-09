@@ -124,7 +124,8 @@ public:
         m_level = lev;
     }
     s32 FunKind(){return m_fun_kind;}
-    std::list<Symbol*>& EscapeList(){return m_escape_list;}
+    llvm::Function* GetFun(){return m_llvm_func;}
+    void SetFun(llvm::Function*f){m_llvm_func = f;}
     Label* GetLabel(){return m_label;}
     ~EnvEntryFunLLVM(){
         if(m_formals)
@@ -136,7 +137,7 @@ private:
     Level* m_level;// managed by level manager
     Label*     m_label;/*managed by label pool*/
     s32 m_fun_kind;
-    std::list<Symbol*> m_escape_list;//for escape
+    llvm::Function* m_llvm_func;
 };
 struct IRGenResult
 {
@@ -161,6 +162,7 @@ public:
         m_top_level = 0;
         Init();
     }
+    ~IRGen();
     Level* OutmostLevel();
     void Dump(){
         m_context->M()->dump();
@@ -176,6 +178,9 @@ public:
     IRGenResult* IRGenVar(SymTab* venv,SymTab* tenv,Level* level,Var* var,llvm::BasicBlock* dest_bb);
     TypeBase* IRGenTy(SymTab* tenv,Level* level,Ty* ty);
     void IRGenTypeDec(SymTab* venv,SymTab* tenv,Level* level,Dec* dec);
+    void IRGenFunctionDec(SymTab* venv,SymTab* tenv,Level* level,Dec* dec,llvm::BasicBlock* dest_bb);
+    FrameBase* MakeNewFrame(FunDec* fundec);
+    TypeFieldList* MakeFormalsList(SymTab* venv,SymTab* tenv,Level* level,FieldList* params);
 private:
     IRGenContext* m_context;
     

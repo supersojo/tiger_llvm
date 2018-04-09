@@ -11,6 +11,7 @@
 #include "tree.h"
 #include "tiger_llvm.h"
 #include <llvm/IR/ValueSymbolTable.h>
+#include "irgencontext.h"
 
 void test_StringSourceCodeStream()
 {
@@ -695,7 +696,7 @@ void test_llvm()
         
     //tiger::scanner::FileSourceCodeStream stream((char*)"a.txt");
     //tiger::scanner::FileSourceCodeStream stream((char*)"b.txt");
-    tiger::scanner::StringSourceCodeStream stream((char*)"let var N:=8 var S:=0 in (while N<10 do (S:=S+N;N:=N+1);if N>5 then N:=1 else N:=0) end");
+    tiger::scanner::StringSourceCodeStream stream((char*)"let var i:=0 in while i<10 do (printint(i);i:=i+1) end");
     
     /* generate sbstract syntax tree*/
     tiger::parser::Parser parser(&stream);
@@ -704,10 +705,26 @@ void test_llvm()
     ir_gen = new tiger::IRGen;
     tenv.Enter(tenv.MakeSymbolFromString("int"),new tiger::EnvEntryVarLLVM(new tiger::TypeInt(),tiger::EnvEntryVarLLVM::kEnvEntryVarLLVM_For_Type, llvm::Type::getInt32Ty( *(ir_gen->GetContext()->C()) ), 0));
 
+    /*
+    printint(x:int)
+    */
+    tiger::TypeFieldNode* node;
+    node = new tiger::TypeFieldNode;
+    tiger::EnvEntryFunLLVM* ef;
+    node->m_field = new tiger::TypeField(tenv.MakeSymbolFromString("x"),tenv.Type(tenv.MakeSymbolFromString("int")));
+    ef = new tiger::EnvEntryFunLLVM(new tiger::TypeFieldList(node),0,ir_gen->OutmostLevel()/*level*/,tiger::TempLabel::NewNamedLabel("printint"),1);
+    venv.Enter(venv.MakeSymbolFromString("printint"),ef);
+    llvm::Type* parms[]={
+        llvm::Type::getInt32Ty(*(tiger::IRGenContext::Get()->C()))
+    };
+    llvm::FunctionType* ft = llvm::FunctionType::get(llvm::Type::getVoidTy( *(tiger::IRGenContext::Get()->C())),llvm::makeArrayRef<llvm::Type*>(parms),false/*var args flag*/);
+    llvm::Function*     f = llvm::Function::Create(ft,llvm::Function::ExternalLinkage,"printint",tiger::IRGenContext::Get()->M());
+    ef->SetFun(f);
         
     ir_gen->Gen(&venv,&tenv,exp);
     ir_gen->Dump();
-    
+    delete ir_gen;
+    delete exp;
 }
 int main()
 {

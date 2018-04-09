@@ -22,6 +22,9 @@ public:
         return m_context;
         
     }
+    static void Exit(){
+        delete m_context;
+    }
     llvm::LLVMContext* C()const{return m_llvm_context;}
     llvm::IRBuilder<>* B()const{return m_builder;}
     llvm::Module*      M()const{return m_module;}
@@ -35,6 +38,11 @@ private:
         m_llvm_context = c;
         m_builder = b;
         m_module = m;
+    }
+    ~IRGenContext(){
+        delete m_module;
+        delete m_builder;
+        delete m_llvm_context;
     }
 };
 }

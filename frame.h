@@ -368,6 +368,8 @@ public:
     llvm::Function* GetFunc(){
         return m_func;
     }
+    void SetCurBB(llvm::BasicBlock* bb){m_cur = bb;}
+    llvm::BasicBlock* CurBB(){return m_cur;}
     ~Level(){
         if(m_frame)
             delete m_frame;
@@ -377,6 +379,8 @@ private:
     Level* m_parent;
     EnvEntryBase* m_env_entry;//only EnvEntryFun used !!
     llvm::Function* m_func;
+    
+    llvm::BasicBlock* m_cur;
 };
 
 struct LevelNode{
