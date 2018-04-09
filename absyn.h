@@ -6,8 +6,40 @@
 #include "tiger_log.h"
 #include "symbol.h"
 namespace tiger{
-  
-class Var{
+
+/*
+Var
+Dec
+Exp
+*/
+template<typename RetTy,
+         typename VarRetTy,
+         typename DecRetTy,
+         typename ExpRetTy>
+class Visitor;
+
+class Node{ //base class of ast tree node
+public:
+    enum{
+        kNode_Var,
+        kNode_Dec,
+        kNode_Exp,
+        kNode_Invalid
+    };
+    Node(){m_type = kNode_Invalid;}
+    Node(s32 type){m_type = type;}
+    s32 Type(){return m_type;}
+    template<typename RetTy,
+         typename VarRetTy,
+         typename DecRetTy,
+         typename ExpRetTy>
+    void Accept(Visitor<RetTy,VarRetTy,DecRetTy,ExpRetTy>& visitor);
+    virtual ~Node(){
+    }
+private:
+    s32 m_type;
+};
+class Var:public Node{
 public:
     enum{
         kVar_Simple,
@@ -15,8 +47,8 @@ public:
         kVar_Subscript,
         kVar_Invalid
     };
-    Var(){m_kind = kVar_Invalid;m_escape=0;/*false*/}
-    Var(s32 kind){m_kind = kind;}
+    Var():Node(kNode_Var){m_kind = kVar_Invalid;m_escape=0;/*false*/}
+    Var(s32 kind):Node(kNode_Var){m_kind = kind;}
     void SetEscape(s32 escape){m_escape = escape;}
     s32  GetEscape(){return m_escape;}
     virtual s32 Kind(){return m_kind;}
@@ -107,7 +139,7 @@ private:
     Exp* m_exp;
 };
 
-class Exp{
+class Exp:public Node{
 public:
     enum{
         kExp_Var,
@@ -127,8 +159,8 @@ public:
         kExp_Array,
         kExp_Invalid
     };
-    Exp(){m_kind = kExp_Invalid;}
-    Exp(s32 kind){m_kind = kind;}
+    Exp():Node(kNode_Exp){m_kind = kExp_Invalid;}
+    Exp(s32 kind):Node(kNode_Exp){m_kind = kind;}
     virtual s32 Kind(){return m_kind;}
     static char* KindString(s32 kind){
         return ExpKindStrings[kind];
@@ -646,7 +678,7 @@ private:
     Exp* m_init;
 };
 
-class Dec{
+class Dec:public Node{
 public:
     enum{
         kDec_Function,
@@ -654,8 +686,8 @@ public:
         kDec_Type,
         kDec_Invalid
     };
-    Dec(){m_kind = kDec_Invalid;}
-    Dec(s32 kind){m_kind = kind;}
+    Dec():Node(kNode_Dec){m_kind = kDec_Invalid;}
+    Dec(s32 kind):Node(kNode_Dec){m_kind = kind;}
     virtual s32 Kind(){return m_kind;}
     virtual Dec* Clone(){
         Dec* n = new Dec;

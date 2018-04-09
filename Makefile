@@ -2,7 +2,7 @@ TARGET = main
 SRCS = $(filter-out runtime.c,$(wildcard *.c))
 OBJS = $(SRCS:.c=.o)
 DEPS = $(SRCS:.c=.d)
-CCFLAGS = $(filter-out -Wall -pedantic -Wwrite-strings -Wcast-qual,$(shell llvm-config --cxxflags))
+CCFLAGS = -std=c++11 $(filter-out -Wall -pedantic -Wwrite-strings -Wcast-qual,$(shell llvm-config --cxxflags))
 LDFLAGS = $(shell llvm-config --ldflags)
 LLVM_LIBS = -lLLVM -lpthread
 .PHONY: all deps clean

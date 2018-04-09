@@ -3,8 +3,17 @@
 #include <string.h>
 
 #include "absyn.h"
+#include "visitor.h"
 
 namespace tiger{
+
+template<typename RetTy,
+         typename VarRetTy,
+         typename DecRetTy,
+         typename ExpRetTy>
+void Node::Accept(Visitor<RetTy,VarRetTy,DecRetTy,ExpRetTy>& visitor){
+    visitor.Visit(this);
+}
 
 char* Exp::ExpKindStrings[]={
         "kExp_Var",

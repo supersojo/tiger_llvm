@@ -695,7 +695,7 @@ void test_llvm()
         
     //tiger::scanner::FileSourceCodeStream stream((char*)"a.txt");
     //tiger::scanner::FileSourceCodeStream stream((char*)"b.txt");
-    tiger::scanner::StringSourceCodeStream stream((char*)"let var N:=8 type intArray=array of int var row:=intArray [N+N+1] of 0 in row[1]:=N end");
+    tiger::scanner::StringSourceCodeStream stream((char*)"let var N:=8 var S:=0 in (while N<10 do (S:=S+N;N:=N+1);if N>5 then N:=1 else N:=0) end");
     
     /* generate sbstract syntax tree*/
     tiger::parser::Parser parser(&stream);

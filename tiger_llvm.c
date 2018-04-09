@@ -11,7 +11,7 @@ void IRGen::Init()
 Level* IRGen::OutmostLevel()
 {
     if(m_top_level==0){
-        //create the mout most function and the entry basic block
+        //create the out most function and the entry basic block
         m_top_level = new Level(0, new FrameBase(FrameBase::kFrame_X86));
         llvm::FunctionType* ft = llvm::FunctionType::get(llvm::Type::getVoidTy(*(m_context->C())),false/*var args flag*/);
         llvm::Function* f = llvm::Function::Create(ft,llvm::Function::ExternalLinkage,"main",m_context->M());
@@ -19,7 +19,6 @@ Level* IRGen::OutmostLevel()
         m_context->B()->SetInsertPoint(bb);
         m_top_level->SetFunc(f);
         
-        allocapoint = m_context->B()->CreateAlloca(llvm::Type::getInt1Ty( *(m_context->C()) ));
     }
 
     return m_top_level;
@@ -41,22 +40,20 @@ IRGenResult*  IRGen::IRGenVar(SymTab* venv,SymTab* tenv,Level* level,Var* var,ll
     switch(var->Kind()){
         case Var::kVar_Simple:
         {
-            m_logger.W("simple var");
+            m_logger.W("simple var using");
             EnvEntryVarLLVM* t;
+            /* find var in symbol table */
             t = dynamic_cast<EnvEntryVarLLVM*>(venv->Lookup(venv->MakeSymbol(dynamic_cast<SimpleVar*>(var)->GetSymbol())));
             TIGER_ASSERT(t!=0,"var %s not found",dynamic_cast<SimpleVar*>(var)->GetSymbol()->Name());
-            result->m_type = t->Type();
-            m_logger.W("%s,%d",__FILE__,__LINE__);
-            result->m_llvm_value = t->GetLLVMValue();
-            m_logger.W("%s,%d",__FILE__,__LINE__);
-            result->m_llvm_type = t->Type()->GetLLVMType();
-            m_logger.W("%s,%d",__FILE__,__LINE__);
+            result->m_type = t->Type();//tiger type
+            result->m_llvm_value = t->GetLLVMValue();//llvm value -- PointerType's value returned by alloca
+            result->m_llvm_type = t->Type()->GetLLVMType();//llvm type -- tiger type to llvm type
             return result;
             
         }
         case Var::kVar_Field:
         {
-            m_logger.W("field var");
+            m_logger.W("field var using");
             /*
             let
             type a = {x:int,y:int}
@@ -68,7 +65,7 @@ IRGenResult*  IRGen::IRGenVar(SymTab* venv,SymTab* tenv,Level* level,Var* var,ll
             TypeFieldNode* head;
             IRGenResult* p = IRGenVar(venv,tenv,level,dynamic_cast<FieldVar*>(var)->GetVar(),dest_bb);
             head = dynamic_cast<TypeRecord*>(dynamic_cast<TypeName*>(p->Type())->Type())->GetList()->GetHead();
-            s32 i=0;// field offset in Record
+            s32 i=0;// field index in Record
             while(head){
                 if(head->m_field->Name()==tenv->MakeSymbol(dynamic_cast<FieldVar*>(var)->GetSym())){
                     /* ok */
@@ -76,7 +73,11 @@ IRGenResult*  IRGen::IRGenVar(SymTab* venv,SymTab* tenv,Level* level,Var* var,ll
                         IRGenContext::Get()->B()->getInt32(0),
                         IRGenContext::Get()->B()->getInt32(i),
                     };
-                    result->m_type = head->m_field->Type();
+                    
+                    result->m_type = head->m_field->Type();// tiger type 
+                    
+                    // m_llvm_value must be PointerType
+                    // Note: getelementptr must return pointer
                     result->m_llvm_value = IRGenContext::Get()->B()->CreateGEP(p->LLVMType(),p->LLVMValue(),inds);
                     result->m_llvm_type = head->m_field->Type()->GetLLVMType();
                     delete p;
@@ -111,14 +112,22 @@ IRGenResult*  IRGen::IRGenVar(SymTab* venv,SymTab* tenv,Level* level,Var* var,ll
                 IRGenContext::Get()->B()->getInt32(0),
                 IRGenContext::Get()->B()->getInt32(1),
             };
-            
+            // access array element ptr base
+            // after use GEP, always load followed
             llvm::Value* tmp = IRGenContext::Get()->B()->CreateGEP(p->LLVMType(),p->LLVMValue(),inds);
             llvm::Value* tmp1 = IRGenContext::Get()->B()->CreateLoad( tmp );
             
+            // access element 
             IRGenResult* t;
             t = IRGenExp(venv,tenv,level,dynamic_cast<SubscriptVar*>(var)->GetExp(),dest_bb);
             result->m_type = dynamic_cast<TypeArray*>(dynamic_cast<TypeName*>(p->Type())->Type())->Type();
-            result->m_llvm_value = IRGenContext::Get()->B()->CreateGEP(result->m_type->GetLLVMType(),tmp1,t->LLVMValue());
+            if( llvm::isa<llvm::PointerType>(t->LLVMValue()->getType()) )
+            {//pointer type need load first
+                llvm::Value* vvv = IRGenContext::Get()->B()->CreateLoad( t->LLVMValue() );
+                result->m_llvm_value = IRGenContext::Get()->B()->CreateGEP(result->m_type->GetLLVMType(),tmp1,vvv);
+            }
+            else
+                result->m_llvm_value = IRGenContext::Get()->B()->CreateGEP(result->m_type->GetLLVMType(),tmp1,t->LLVMValue());
             result->m_llvm_type = result->m_type->GetLLVMType();
             return result;
         }
@@ -128,14 +137,15 @@ IRGenResult*  IRGen::IRGenVar(SymTab* venv,SymTab* tenv,Level* level,Var* var,ll
     m_logger.W("shoud not reach here %s,%d",__FILE__,__LINE__);
     return 0;
 }
+/*
+gen user defined tiger type
+*/
 TypeBase* IRGen::IRGenTy(SymTab* tenv,Level* level,Ty* ty)
 {
     switch(ty->Kind())
     {
         /*
-        type a={x:int,y:{a:int}}
-        type a = x
-        NameTyPair("a",NameTy("x"))
+        type a={x:int,y:{a:int}} not suppport
         */
         case Ty::kTy_Name:
         {
@@ -156,9 +166,6 @@ TypeBase* IRGen::IRGenTy(SymTab* tenv,Level* level,Ty* ty)
             TIGER_ASSERT(dynamic_cast<RecordTy*>(ty)->GetList(),"empty body");
             head = dynamic_cast<RecordTy*>(ty)->GetList()->GetHead();
             while(head){
-                m_logger.W("%s,%d",__FILE__,__LINE__);
-                //head->m_field->Name()
-                //head->m_field->Type()
                 /*
                 type a={x:a}
                 */
@@ -206,18 +213,10 @@ atype a={a:int,b:string}
 */
 void IRGen::IRGenTypeDec(SymTab* venv,SymTab* tenv,Level* level,Dec* dec)
 {
-    m_logger.W("%s,%d",__FILE__,__LINE__);
     NameTyPairNode* head;
     head = dynamic_cast<TypeDec*>(dec)->GetList()->GetHead();
     /* process headers of decs */
     while(head){
-        /*
-        EnvEntryVar* p = dynamic_cast<EnvEntryVar*>(tenv->Lookup(tenv->MakeSymbol(head->m_nametypair->Name())));
-        if(p){
-            m_logger.W("Type %s redefined",head->m_nametypair->Name()->Name());
-            //TIGER_ASSERT(0,"Type %s redefined",head->m_nametypair->Name()->Name());
-        }
-        */
         //m_logger.D("New type with %s",head->m_nametypair->Name()->Name());
         tenv->Enter( tenv->MakeSymbol(head->m_nametypair->Name()),
                      new EnvEntryVarLLVM( 
@@ -336,8 +335,7 @@ void IRGen::IRGenDec(SymTab* venv,SymTab* tenv,Level* level,Dec* dec,llvm::Basic
                 //p = dynamic_cast<EnvEntryVarLLVM*>(tenv->Lookup(tenv->MakeSymbol(dynamic_cast<ArrayTy*>(ty)->Name())));
                 p = dynamic_cast<EnvEntryVarLLVM*>(tenv->Lookup( tenv->MakeSymbol( dynamic_cast<ArrayExp*>(dynamic_cast<VarDec*>(dec)->GetExp())->Name() ) ));
                 llvm::Value* v = IRGenContext::Get()->B()->CreateAlloca( p->Type()->GetLLVMType() );
-                //llvm::Value* v = new llvm::AllocaInst(p->Type()->GetLLVMType());
-                //llvm::dyn_cast<llvm::AllocaInst >(v)->insertBefore(allocapoint);
+
                 //element ptr
                 llvm::Type* typtr = p->Type()->GetLLVMType()->getContainedType(1);
                 
@@ -354,8 +352,7 @@ void IRGen::IRGenDec(SymTab* venv,SymTab* tenv,Level* level,Dec* dec,llvm::Basic
                     vvv = IRGenContext::Get()->B()->CreateAlloca( typtr->getPointerElementType(),x );
                 }else
                     vvv = IRGenContext::Get()->B()->CreateAlloca( typtr->getPointerElementType(),t->m_llvm_value );
-                    //vvv = new llvm::AllocaInst( typtr->getPointerElementType(),t->m_llvm_value );
-                //llvm::dyn_cast<llvm::AllocaInst>(vvv)->insertBefore(allocapoint);
+                //array elements
                 llvm::Value* vvvv = IRGenContext::Get()->B()->CreateBitCast(vvv,typtr);
                 llvm::Value* ind0[]={
                     m_context->B()->getInt32(0),
@@ -368,6 +365,7 @@ void IRGen::IRGenDec(SymTab* venv,SymTab* tenv,Level* level,Dec* dec,llvm::Basic
                     m_context->B()->getInt32(0),
                     m_context->B()->getInt32(0)
                 };
+                //array size
                 llvm::Value* v1 = IRGenContext::Get()->B()->CreateGEP( p->Type()->GetLLVMType(),v, ind);
                 llvm::Value* v2;
                 if(llvm::isa<llvm::PointerType>(t->m_llvm_value->getType())){
@@ -375,7 +373,7 @@ void IRGen::IRGenDec(SymTab* venv,SymTab* tenv,Level* level,Dec* dec,llvm::Basic
                     v2 = IRGenContext::Get()->B()->CreateStore( v11,v1);
                 }else
                     v2 = IRGenContext::Get()->B()->CreateStore( t->m_llvm_value,v1);
-                
+                // record it in symtab
                 venv->Enter( 
                     venv->MakeSymbol( dynamic_cast<VarDec*>(dec)->GetSymbol() ), 
                     new EnvEntryVarLLVM( 
@@ -385,6 +383,7 @@ void IRGen::IRGenDec(SymTab* venv,SymTab* tenv,Level* level,Dec* dec,llvm::Basic
                         v
                     ) 
                 );
+                ////TBD: element initialize
                 
                 return;
                 
@@ -397,7 +396,6 @@ void IRGen::IRGenDec(SymTab* venv,SymTab* tenv,Level* level,Dec* dec,llvm::Basic
                 m_logger.D("record var");
                 p = dynamic_cast<EnvEntryVarLLVM*>(tenv->Lookup( tenv->MakeSymbol( dynamic_cast<RecordExp*>(dynamic_cast<VarDec*>(dec)->GetExp())->Name() ) ));
                 llvm::Value* v = IRGenContext::Get()->B()->CreateAlloca( p->Type()->GetLLVMType() );
-                p->Type()->GetLLVMType()->dump();
                 venv->Enter( 
                     venv->MakeSymbol( dynamic_cast<VarDec*>(dec)->GetSymbol() ), 
                     new EnvEntryVarLLVM( 
@@ -407,7 +405,7 @@ void IRGen::IRGenDec(SymTab* venv,SymTab* tenv,Level* level,Dec* dec,llvm::Basic
                         v
                     ) 
                 );
-                v->dump();
+                //TBD: element initialize
                 m_logger.D("record var end");
                 return;
             
@@ -437,6 +435,7 @@ void IRGen::IRGenDec(SymTab* venv,SymTab* tenv,Level* level,Dec* dec,llvm::Basic
         }
         case Dec::kDec_Function:
         {
+            //TBD: 
             return;
         }
         case Dec::kDec_Type:{
@@ -494,18 +493,15 @@ IRGenResult* IRGen::IRGenExp(SymTab* venv,SymTab* tenv,Level* level,Exp* e,llvm:
         {
             Symbol t("int");
             
-            m_logger.D("kExp_Int 11");
-            result->m_type = tenv->Type(tenv->MakeSymbol(&t));
-            m_logger.D("kExp_Int 22");
-            result->m_llvm_type = result->Type()->GetLLVMType();
-            m_logger.D("kExp_Int 33");
-            result->m_llvm_value = IRGenContext::Get()->B()->getInt32( dynamic_cast<IntExp*>(e)->GetInt() );
-            m_logger.D("kExp_Int 44");
+            result->m_type = tenv->Type(tenv->MakeSymbol(&t));//tiger type
+            result->m_llvm_type = result->Type()->GetLLVMType();//i32Ty
+            result->m_llvm_value = IRGenContext::Get()->B()->getInt32( dynamic_cast<IntExp*>(e)->GetInt() );//constant
             return result;
         }
         case Exp::kExp_Var:
         {
-            delete result;
+            delete result;//no use
+            // get var's llvm value
             return IRGenVar(venv,tenv,level,dynamic_cast<VarExp*>(e)->GetVar(),dest_bb);
         }
         case Exp::kExp_Assign:
@@ -513,22 +509,21 @@ IRGenResult* IRGen::IRGenExp(SymTab* venv,SymTab* tenv,Level* level,Exp* e,llvm:
             m_logger.D("kExp_Assign");
             IRGenResult* a = IRGenVar(venv,tenv,level,dynamic_cast<AssignExp*>(e)->GetVar(),dest_bb);
             IRGenResult* b = IRGenExp(venv,tenv,level,dynamic_cast<AssignExp*>(e)->GetExp(),dest_bb);
-            m_logger.D("assign 11 %d,",b->Type()->GetLLVMType()->getTypeID());
             if( llvm::isa<llvm::PointerType>(b->m_llvm_value->getType()) )
             {
-                m_logger.D("assign 11");
-
+                /*
+                assign
+                dst must be pointer
+                src must be dst pointer to
+                */
                 if(a->m_llvm_value->getType()->getPointerElementType()==b->m_llvm_value->getType())
                     IRGenContext::Get()->B()->CreateStore(b->m_llvm_value,a->m_llvm_value);
                 else{
-                    m_logger.D("assign 12");
                     llvm::Value* b_v = IRGenContext::Get()->B()->CreateLoad(b->m_llvm_value);
                     IRGenContext::Get()->B()->CreateStore(b_v,a->m_llvm_value);
-                    m_logger.D("assign 13");
                 }
             }else{
-            m_logger.D("assign 22");
-            IRGenContext::Get()->B()->CreateStore(b->m_llvm_value,a->m_llvm_value);
+                IRGenContext::Get()->B()->CreateStore(b->m_llvm_value,a->m_llvm_value);
             }
             delete a;
             delete b;
@@ -591,6 +586,13 @@ IRGenResult* IRGen::IRGenExp(SymTab* venv,SymTab* tenv,Level* level,Exp* e,llvm:
                 }
                 case Oper::kOper_Sub:
                 {
+                    m_logger.D("sub");
+                    result->m_type = l_val->Type();
+                    result->m_llvm_value = IRGenContext::Get()->B()->CreateSub(l_vv?l_vv:l_val->m_llvm_value,r_vv?r_vv:r_val->m_llvm_value);
+                    result->m_llvm_type = l_val->Type()->GetLLVMType();
+                    delete l_val;
+                    delete r_val;
+                    return result;
                 }
                 case Oper::kOper_Mul:
                 {
@@ -600,6 +602,15 @@ IRGenResult* IRGen::IRGenExp(SymTab* venv,SymTab* tenv,Level* level,Exp* e,llvm:
                 }
                 case Oper::kOper_Lt:
                 {
+                    /*
+                    CreateIcmp();
+                    CreateBr(cond,true_l,false_l);
+                    */
+                    llvm::Value* cond = m_context->B()->CreateICmp(llvm::CmpInst::ICMP_SLT,l_vv?l_vv:l_val->m_llvm_value,r_vv?r_vv:r_val->m_llvm_value);
+                    result->m_type = l_val->Type();
+                    result->m_llvm_value = cond;
+                    result->m_llvm_type = l_val->Type()->GetLLVMType();
+                    return result;
                 }
                 case Oper::kOper_Gt:
                 {
@@ -615,16 +626,54 @@ IRGenResult* IRGen::IRGenExp(SymTab* venv,SymTab* tenv,Level* level,Exp* e,llvm:
                 }
                 case Oper::kOper_Le:
                 {
+                    /*
+                    CreateIcmp();
+                    CreateBr(cond,true_l,false_l);
+                    */
+                    llvm::Value* cond = m_context->B()->CreateICmp(llvm::CmpInst::ICMP_SLE,l_vv?l_vv:l_val->m_llvm_value,r_vv?r_vv:r_val->m_llvm_value);
+                    result->m_type = l_val->Type();
+                    result->m_llvm_value = cond;
+                    result->m_llvm_type = l_val->Type()->GetLLVMType();
+                    return result;
                 }
                 case Oper::kOper_Ge:
                 {
+                    /*
+                    CreateIcmp();
+                    CreateBr(cond,true_l,false_l);
+                    */
+                    llvm::Value* cond = m_context->B()->CreateICmp(llvm::CmpInst::ICMP_SGE,l_vv?l_vv:l_val->m_llvm_value,r_vv?r_vv:r_val->m_llvm_value);
+                    result->m_type = l_val->Type();
+                    result->m_llvm_value = cond;
+                    result->m_llvm_type = l_val->Type()->GetLLVMType();
+                    return result;
                 }
                 case Oper::kOper_Eq:
                 {
+                    /*
+                    CreateIcmp();
+                    CreateBr(cond,true_l,false_l);
+                    */
+                    llvm::Value* cond = m_context->B()->CreateICmp(llvm::CmpInst::ICMP_EQ,l_vv?l_vv:l_val->m_llvm_value,r_vv?r_vv:r_val->m_llvm_value);
+                    result->m_type = l_val->Type();
+                    result->m_llvm_value = cond;
+                    result->m_llvm_type = l_val->Type()->GetLLVMType();
+                    return result;
+                }
+                case Oper::kOper_Neq:
+                {
+                    /*
+                    CreateIcmp();
+                    CreateBr(cond,true_l,false_l);
+                    */
+                    llvm::Value* cond = m_context->B()->CreateICmp(llvm::CmpInst::ICMP_NE,l_vv?l_vv:l_val->m_llvm_value,r_vv?r_vv:r_val->m_llvm_value);
+                    result->m_type = l_val->Type();
+                    result->m_llvm_value = cond;
+                    result->m_llvm_type = l_val->Type()->GetLLVMType();
+                    return result;
                 }
                 default:
                 {
-                    m_logger.D("????");
                     TIGER_ASSERT(0,"Should not reach here");
                 }
             }

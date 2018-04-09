@@ -88,11 +88,6 @@ public:
     void      Update(TypeBase* n){
         TypeName*p = dynamic_cast<TypeName*>(m_type);
         p->Update(n);
-        //construct structtype of llvm
-        //std::vector<llvm::Type*> vv;
-        //vv.insert()
-        //m_llvm_type = llvm::StructType(array);
-
     }
     ~EnvEntryVarLLVM(){
         if(m_intent==kEnvEntryVarLLVM_For_Type){
@@ -106,28 +101,11 @@ private:
     TypeBase* m_type;//
     s32 m_intent;
     
-    /*
-    if type can associate llvm type then record iter_swap
-    int -- Type::getInt32Ty(ctx)
-    string -- PointerType::get(Type::getInt8Ty(ctx))
-    */
     llvm::Type* m_llvm_type;
     llvm::Value* m_value;
     LoggerStdio m_logger;
 };
-/*
-    function foo(){//escape list: 
-    
-        var a = 1
-        var b = 2
-        function bar(){ //escape list: a->b
-            a = 2 // get index in escape list, 
-            b = 3 // get index in escape list
-        }
-        
-        bar()
-    }
-*/
+
 class EnvEntryFunLLVM:public EnvEntryBase
 {
 public:
@@ -151,8 +129,6 @@ public:
     ~EnvEntryFunLLVM(){
         if(m_formals)
             delete m_formals;
-        //delete m_result;
-        //m_escape_list.erase();
     }
 private:
     TypeFieldList* m_formals;// parm info 
@@ -191,7 +167,6 @@ public:
     }
     void Gen(SymTab* venv,SymTab* tenv,Exp* e){
         IRGenExp(venv,tenv,OutmostLevel(),e,0);
-        allocapoint->eraseFromParent();
         m_context->B()->CreateRetVoid();
     }
     IRGenContext* GetContext(){return m_context;}
@@ -204,7 +179,6 @@ public:
 private:
     IRGenContext* m_context;
     
-    llvm::Instruction * allocapoint;
     
     void Init();
     Level* m_top_level;
