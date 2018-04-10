@@ -4,8 +4,22 @@
 
 #include "tiger_type.h"
 #include "tiger_log.h"
+#include "tiger_assert.h"
 #include "symbol.h"
 namespace tiger{
+
+template<typename T,typename U>
+bool isa(U* u)
+{
+    return T::classof(u);
+}
+template<typename T,typename U>
+T* dyn_cast(U* u)
+{
+    if(isa<T>(u))
+        return dynamic_cast<T*>(u);
+    TIGER_ASSERT(0,"wrong type cast!!");
+}
 
 /*
 Var
@@ -58,6 +72,11 @@ public:
         n->m_escape = m_escape;//not used
         return n;
     }
+    static bool classof(Var * var){
+        return ( (var->Kind()==kVar_Simple)||
+                 (var->Kind()==kVar_Field)||
+                 (var->Kind()==kVar_Subscript) );
+    }
     virtual ~Var(){}
 private:
     s32 m_kind;
@@ -84,6 +103,9 @@ public:
         SimpleVar* n = new SimpleVar;
         n->m_sym = m_sym?m_sym->Clone():0;
         return n;
+    }
+    static bool classof(Var * var){
+        return (var->Kind()==kVar_Simple);
     }
 public:
     Symbol* m_sym;
@@ -114,6 +136,9 @@ public:
         delete m_var;
         delete m_sym;
     }
+    static bool classof(Var * var){
+        return (var->Kind()==kVar_Field);
+    }
 private:
     Var* m_var;//var 
     Symbol* m_sym;//field
@@ -134,6 +159,9 @@ public:
     Exp* GetExp(){return m_exp;}
     SubscriptVar* Clone();
     ~SubscriptVar();
+    static bool classof(Var * var){
+        return (var->Kind()==kVar_Subscript);
+    }
 private:
     Var* m_var;
     Exp* m_exp;
@@ -169,6 +197,10 @@ public:
         Exp* n = new Exp;
         n->m_kind = m_kind;
         return n;
+    }
+    static bool classof(Exp* e)
+    {
+        return ((e->Kind()>=kExp_Var) && (e->Kind()<=kExp_Array));
     }
     virtual ~Exp(){}
 private:
@@ -261,6 +293,10 @@ public:
         n->m_var = m_var?m_var->Clone():0;
         return n;
     }
+    static bool classof(Exp* e)
+    {
+        return (e->Kind()==kExp_Var);
+    }
 private:
     Var* m_var;
 };
@@ -272,6 +308,10 @@ public:
     NilExp* Clone(){
         NilExp* n = new NilExp;
         return n;
+    }
+    static bool classof(Exp* e)
+    {
+        return (e->Kind()==kExp_Nil);
     }
 };
 
@@ -289,6 +329,10 @@ public:
         return n;
     }
     s32 GetInt(){return m_ival;}
+    static bool classof(Exp* e)
+    {
+        return (e->Kind()==kExp_Int);
+    }
 private:
     s32 m_ival;
 };
@@ -313,6 +357,10 @@ public:
         logger.SetModule("absyn");
         //logger.D("~StringExp");
         free(m_sval);
+    }
+    static bool classof(Exp* e)
+    {
+        return (e->Kind()==kExp_String);
     }
 private:
     char* m_sval;
@@ -343,6 +391,10 @@ public:
         //logger.D("~CallExp");
         delete m_sym;
         delete m_explist;
+    }
+    static bool classof(Exp* e)
+    {
+        return (e->Kind()==kExp_Call);
     }
 private:
     Symbol* m_sym;/* func */
@@ -419,6 +471,10 @@ public:
         delete m_left;
         delete m_right;
     }
+    static bool classof(Exp* e)
+    {
+        return (e->Kind()==kExp_Op);
+    }
 private:
     Oper* m_oper;
     Exp* m_left;
@@ -466,6 +522,10 @@ public:
         //logger.D("~SeqExp");
         delete m_list;
     }
+    static bool classof(Exp* e)
+    {
+        return (e->Kind()==kExp_Seq);
+    }
 private:
     ExpList* m_list;
 };
@@ -495,6 +555,10 @@ public:
         //logger.D("~AssignExp");
         delete m_var;
         delete m_exp;
+    }
+    static bool classof(Exp* e)
+    {
+        return (e->Kind()==kExp_Assign);
     }
 private:
     Var* m_var;
@@ -532,6 +596,10 @@ public:
         delete m_then;
         delete m_elsee;
     }
+    static bool classof(Exp* e)
+    {
+        return (e->Kind()==kExp_If);
+    }
 private:
     Exp* m_test;
     Exp* m_then;
@@ -564,6 +632,10 @@ public:
         delete m_test;
         delete m_body;
     }
+    static bool classof(Exp* e)
+    {
+        return (e->Kind()==kExp_While);
+    }
 private:
     Exp* m_test;
     Exp* m_body;
@@ -575,6 +647,10 @@ public:
     BreakExp* Clone(){
         BreakExp* n = new BreakExp;
         return n;
+    }
+    static bool classof(Exp* e)
+    {
+        return (e->Kind()==kExp_Break);
     }
 };
 
@@ -614,6 +690,10 @@ public:
         delete m_hi;
         delete m_body;
     }
+    static bool classof(Exp* e)
+    {
+        return (e->Kind()==kExp_For);
+    }
 private:
     Symbol* m_var;
     Exp* m_lo;
@@ -636,6 +716,10 @@ public:
     DecList* GetDecList(){return m_decs;}
     Exp*     GetBody(){return m_body;}
     ~LetExp();
+    static bool classof(Exp* e)
+    {
+        return (e->Kind()==kExp_Let);
+    }
 private:
     DecList* m_decs;
     Exp* m_body;
@@ -672,6 +756,10 @@ public:
         delete m_size;
         delete m_init;
     }
+    static bool classof(Exp* e)
+    {
+        return (e->Kind()==kExp_Array);
+    }
 private:
     Symbol* m_type;
     Exp* m_size;
@@ -694,7 +782,11 @@ public:
         n->m_kind = m_kind;
         return n;
     }
-    virtual ~Dec(){} 
+    virtual ~Dec(){}
+    static bool classof(Dec* d)
+    {
+        return ((d->Kind()>=kDec_Function)&&(d->Kind()<=kDec_Type));
+    }
 private:
     s32 m_kind;
 };
@@ -880,6 +972,10 @@ public:
         //logger.D("~FunctionDec");
         delete m_fundeclist;
     }
+    static bool classof(Dec* d)
+    {
+        return (d->Kind()==kDec_Function);
+    }
 private:
     FunDecList* m_fundeclist;
 };
@@ -915,6 +1011,10 @@ public:
         delete m_type;
         delete m_init;
     }
+    static bool classof(Dec* d)
+    {
+        return (d->Kind()==kDec_Var);
+    }
 private:
     Symbol* m_var;
     Symbol* m_type;
@@ -930,6 +1030,10 @@ public:
     NameTyPairList* GetList(){return m_nametylist;}
     TypeDec* Clone();
     ~TypeDec();
+    static bool classof(Dec* d)
+    {
+        return (d->Kind()==kDec_Type);
+    }
 private:
     NameTyPairList* m_nametylist;
 };
@@ -952,6 +1056,10 @@ public:
         return n;
     }
     virtual ~Ty(){}
+    static bool classof(Ty* t)
+    {
+        return (t->Kind()>=kTy_Name && t->Kind()<=kTy_Array);
+    }
 private:
     s32 m_kind;
 };
@@ -977,6 +1085,10 @@ public:
         //logger.D("~NameTy");
         delete m_sym;
     }
+    static bool classof(Ty* t)
+    {
+        return (t->Kind()==kTy_Name);
+    }
 private:
         Symbol* m_sym;
 };
@@ -993,6 +1105,10 @@ public:
     RecordTy* Clone();
     FieldList* GetList(){return m_list;}
     ~RecordTy();
+    static bool classof(Ty* t)
+    {
+        return (t->Kind()==kTy_Record);
+    }
 private:
     FieldList* m_list;
 };
@@ -1017,6 +1133,10 @@ public:
         logger.SetModule("absyn");
         //logger.D("~ArrayTy");
         delete m_name;
+    }
+    static bool classof(Ty* t)
+    {
+        return (t->Kind()==kTy_Array);
     }
 private:
     Symbol* m_name;

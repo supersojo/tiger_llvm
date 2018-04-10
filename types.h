@@ -74,6 +74,10 @@ public:
     void SetLLVMType(llvm::Type* ty){m_llvm_type = ty;}
     virtual s32 Size(){return 0;}
     virtual ~TypeBase(){}
+    static bool classof(TypeBase* t)
+    {
+        return (t->Kind()>=kType_Int && t->Kind()<=kType_Name);
+    }
 private:
     s32 m_kind;
     llvm::Type* m_llvm_type;
@@ -85,6 +89,10 @@ public:
         SetLLVMType( (llvm::Type*)llvm::Type::getInt32Ty( *(IRGenContext::Get()->C())) );
     }
     virtual s32 Size(){return 4;/*ugly code*/}
+    static bool classof(TypeBase* t)
+    {
+        return (t->Kind()==kType_Int);
+    }
 };
 class TypeString:public TypeBase{
 public:
@@ -92,6 +100,10 @@ public:
         //SetLLVMType( llvm::PointerType::getUnqual(llvm::Type::getInt8Ty( *(IRGenContext::Get()->C()))) );
     }
     virtual s32 Size(){return 4;/*ugly code*/}
+    static bool classof(TypeBase* t)
+    {
+        return (t->Kind()==kType_String);
+    }
 };
 
 class TypeNil:public TypeBase{
@@ -100,6 +112,10 @@ public:
         //SetLLVMType( (llvm::Type*)llvm::Type::getInt32Ty(*g_llvm_context) );
     }
     virtual s32 Size(){return 0;/*ugly code*/}
+    static bool classof(TypeBase* t)
+    {
+        return (t->Kind()==kType_Nil);
+    }
 };
 
 class TypeVoid:public TypeBase{
@@ -108,21 +124,16 @@ public:
         //SetLLVMType( (llvm::Type*)llvm::Type::getInt32Ty(*g_llvm_context) );
     }
     virtual s32 Size(){return 0;/*ugly code*/}
+    static bool classof(TypeBase* t)
+    {
+        return (t->Kind()==kType_Void);
+    }
 };
 
 class TypeArray:public TypeBase{
 public:
     TypeArray():TypeBase(kType_Array){
         m_array=0;
-        
-        llvm::Type* tys[]={
-            llvm::Type::getInt32Ty( *(IRGenContext::Get()->C()) ),
-            llvm::PointerType::getUnqual( m_array->GetLLVMType() )
-        };
-        llvm::Type* ty = llvm::StructType::create(
-            tys
-        );
-        SetLLVMType(ty);
     }
     TypeArray(TypeBase* array):TypeBase(kType_Array){
         m_array = array;
@@ -137,6 +148,10 @@ public:
     }
     ~TypeArray(){
         //delete m_array;
+    }
+    static bool classof(TypeBase* t)
+    {
+        return (t->Kind()==kType_Array);
     }
 private:
     TypeBase* m_array;/* memory managed by type member, not type array */
@@ -224,6 +239,10 @@ public:
         return i;
     }
     ~TypeRecord(){delete m_record;}
+    static bool classof(TypeBase* t)
+    {
+        return (t->Kind()==kType_Record);
+    }
 private:
     TypeFieldList* m_record;
 };
@@ -265,6 +284,10 @@ public:
         {
             delete m_type;
         }
+    }
+    static bool classof(TypeBase* t)
+    {
+        return (t->Kind()==kType_Name);
     }
 private:
     Symbol* m_name;/* memory managed by string hash table */

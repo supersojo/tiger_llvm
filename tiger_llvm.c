@@ -230,7 +230,6 @@ void IRGen::IRGenTypeDec(SymTab* venv,SymTab* tenv,Level* level,Dec* dec)
                    );
         head = head->next;
     }
-    m_logger.W("%s,%d",__FILE__,__LINE__);
     /* process bodys of decs*/
     head = dynamic_cast<TypeDec*>(dec)->GetList()->GetHead();
     while(head){
@@ -238,10 +237,8 @@ void IRGen::IRGenTypeDec(SymTab* venv,SymTab* tenv,Level* level,Dec* dec)
         gen type infor from absyn
         type a = {x:int,y:a}
         */
-        m_logger.W("%s,%d",__FILE__,__LINE__);
         TypeBase* t = IRGenTy(tenv,level,head->m_nametypair->Type());
         if(t->Kind()!=TypeBase::kType_Name){
-            m_logger.W("%s,%d",__FILE__,__LINE__);
             /*
             type a={x:int,y:int}
             When type "a" insert tenv, it's type is dummy TypeName.Now we get real type so refill it here.
@@ -249,7 +246,7 @@ void IRGen::IRGenTypeDec(SymTab* venv,SymTab* tenv,Level* level,Dec* dec)
             dynamic_cast<EnvEntryVarLLVM*>(tenv->Lookup(tenv->MakeSymbol(head->m_nametypair->Name())))->Update(t);
         }
         else{
-            m_logger.W("%s,%d",__FILE__,__LINE__);
+            // check cycle dependency 
             EnvEntryVarLLVM* p = dynamic_cast<EnvEntryVarLLVM*>(tenv->Lookup(tenv->MakeSymbol(head->m_nametypair->Name())));
             p->Update(dynamic_cast<TypeName*>(t));
             if(dynamic_cast<TypeName*>(t)->Type()==dynamic_cast<TypeName*>(p->Type())){
@@ -263,7 +260,6 @@ void IRGen::IRGenTypeDec(SymTab* venv,SymTab* tenv,Level* level,Dec* dec)
         }
         head = head->next;
     }
-    m_logger.W("%s,%d",__FILE__,__LINE__);
     /* tiger type to llvm type */
     head = dynamic_cast<TypeDec*>(dec)->GetList()->GetHead();
     while(head){
@@ -994,20 +990,6 @@ IRGenResult* IRGen::IRGenExp(SymTab* venv,SymTab* tenv,Level* level,Exp* e,llvm:
             XXXX2
             while need jump to XXXX2 // create new bb  the new bb should jump to the XXXX2
             
-            
-            
-            
-            while cond
-             st
-             
-            loop:
-                cond
-            body:
-                
-                
-                br loop
-            end:
-               br dest_bb
             */
             Exp* test;
             Exp* body;
@@ -1019,8 +1001,9 @@ IRGenResult* IRGen::IRGenExp(SymTab* venv,SymTab* tenv,Level* level,Exp* e,llvm:
             llvm::BasicBlock* body_bb;
             llvm::BasicBlock* end_bb;
             
-            test = dynamic_cast<WhileExp*>(e)->GetTest();
-            body = dynamic_cast<WhileExp*>(e)->GetExp();
+            //dyn_cast<WhileExp>(e)
+            test = dyn_cast<WhileExp>(e)->GetTest();
+            body = dyn_cast<WhileExp>(e)->GetExp();
             
             loop_bb = llvm::BasicBlock::Create( *(m_context->C()),"loop",level->GetFunc());
             body_bb = llvm::BasicBlock::Create( *(m_context->C()),"body",level->GetFunc());
